@@ -1,0 +1,13 @@
+services:
+  dash: 
+    build:
+      context: .
+      dockerfile: Dockerfile       
+    container_name: kds-dashboard
+    ports:
+      - "8050:8050"
+    volumes:                       
+      - ./app:/usr/src/app/app
+    environment:
+      FLASK_ENV: development      
+    command: python app/app.py
