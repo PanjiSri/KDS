@@ -5,4 +5,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY ./app ./app
 EXPOSE 8050
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONWARNINGS="ignore::UserWarning"
 CMD ["python", "app/app.py"]
