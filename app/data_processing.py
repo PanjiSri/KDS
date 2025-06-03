@@ -5,38 +5,31 @@ import base64
 import tempfile
 import os
 import warnings
-from cyvcf2 import VCF 
+from cyvcf2 import VCF
 
 try:
     from vcfFunctions import (
         read_vcf_for_analysis,
         apply_quality_control,
-        run_pca_analysis,
-        generate_summary_insights
+        run_pca_analysis
     )
 except ImportError:
     from app.vcfFunctions import (
         read_vcf_for_analysis,
         apply_quality_control,
-        run_pca_analysis,
-        generate_summary_insights
+        run_pca_analysis
     )
 
 def parse_vcf_to_json_summary(contents, filename):
-    """
-    Parser VCF awal menggunakan cyvcf2 untuk mendapatkan ringkasan cepat.
-    Ini tidak digunakan untuk analisis utama, hanya untuk status unggah.
-    """
     if contents is None:
-        return None, "No VCF file uploaded."
+        return None, "Tidak ada berkas VCF yang diunggah."
     
     try:
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
     except Exception as e:
-        return None, f"Error decoding file: {str(e)}"
+        return None, f"Kesalahan saat mendekode berkas: {str(e)}"
     
-    # Simpan ke file temporer untuk cyvcf2
     suffix = '.vcf.gz' if filename.endswith('.gz') else '.vcf'
     is_gzipped = suffix == '.vcf.gz'
 
@@ -48,21 +41,19 @@ def parse_vcf_to_json_summary(contents, filename):
         
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            # cyvcf2 bisa membaca .vcf atau .vcf.gz secara otomatis
             vcf_reader = VCF(temp_file_path, strict_gt=False)
             samples = list(vcf_reader.samples)
             
-            # Hitung total varian (bisa lambat untuk file besar, jadi kita batasi)
             total_variants = 0
             for _ in vcf_reader:
                 total_variants += 1
-                if total_variants > 100000:  # Batasi iterasi untuk file besar
-                    total_variants = ">100,000 (estimation)"
+                if total_variants > 100000:
+                    total_variants = ">100.000 (estimasi)"
                     break
             vcf_reader.close()
 
             if not samples:
-                return None, f"No samples found in VCF file '{filename}'."
+                return None, f"Tidak ada sampel ditemukan dalam berkas VCF '{filename}'."
             
             result_data = {
                 'samples_count': len(samples),
@@ -70,18 +61,18 @@ def parse_vcf_to_json_summary(contents, filename):
                 'filename': filename,
                 'vcf_contents_base64': content_string
             }
-            return result_data, f"Samples: {len(samples)}, Variants: {total_variants}."
+            return result_data, f"Sampel: {len(samples)}, Varian: {total_variants}."
         
     except Exception as e:
-        print(f"VCF Summary Parsing Error for {filename}: {e}")
+        print(f"Kesalahan Parsing Ringkasan VCF untuk {filename}: {e}")
         error_msg = str(e)
         if "BGZF" in error_msg and not is_gzipped:
-            return None, f"Error: VCF file '{filename}' appears to be gzipped but does not have a .gz extension."
+            return None, f"Kesalahan: Berkas VCF '{filename}' tampak terkompresi gzip tetapi tidak memiliki ekstensi .gz."
         elif "not a VCF file" in error_msg or "Problem parsing" in error_msg:
-            return None, f"Error: File '{filename}' does not appear to be a valid VCF file."
+            return None, f"Kesalahan: Berkas '{filename}' bukan merupakan berkas VCF yang valid."
         elif "No such file" in error_msg:
-            return None, f"Error: Could not create temporary file for processing."
-        return None, f"Error parsing VCF: {error_msg}"
+            return None, f"Kesalahan: Tidak dapat membuat berkas temporer untuk pemrosesan."
+        return None, f"Kesalahan saat memparsing VCF: {error_msg}"
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
             try:
@@ -90,17 +81,13 @@ def parse_vcf_to_json_summary(contents, filename):
                 pass
 
 
-def trigger_analysis_pipeline(vcf_contents_base64, filename, 
+def trigger_analysis_pipeline(vcf_contents_base64, filename,
                               maf_thresh=0.05, snp_miss_thresh=0.2, ind_miss_thresh=0.2, n_pca_components=3):
-    """
-    Orkestrasi seluruh pipeline analisis dari VCF ke PCA.
-    """
     try:
         decoded_vcf = base64.b64decode(vcf_contents_base64)
     except Exception as e:
-        raise RuntimeError(f"Error decoding VCF file: {str(e)}")
+        raise RuntimeError(f"Kesalahan saat mendekode berkas VCF: {str(e)}")
     
-    # Simpan ke file temporer untuk scikit-allel
     suffix = '.vcf.gz' if filename.endswith('.gz') else '.vcf'
     temp_vcf_path = None
     try:
@@ -108,49 +95,45 @@ def trigger_analysis_pipeline(vcf_contents_base64, filename,
             temp_file.write(decoded_vcf)
             temp_vcf_path = temp_file.name
         
-        # 1. Baca VCF dengan scikit-allel
         try:
             callset = read_vcf_for_analysis(temp_vcf_path)
         except Exception as e:
-            raise RuntimeError(f"Error reading VCF file: {str(e)}")
+            raise RuntimeError(f"Kesalahan saat membaca berkas VCF: {str(e)}")
         
-        # 2. Quality Control
         try:
             gn_imputed_T, samples_qc, snps_orig, snps_qc, samples_orig = apply_quality_control(
-                callset, 
-                maf_threshold=maf_thresh, 
-                snp_missing_threshold=snp_miss_thresh, 
+                callset,
+                maf_threshold=maf_thresh,
+                snp_missing_threshold=snp_miss_thresh,
                 ind_missing_threshold=ind_miss_thresh
             )
         except Exception as e:
-            raise RuntimeError(f"Error during quality control: {str(e)}")
+            raise RuntimeError(f"Kesalahan selama kontrol kualitas: {str(e)}")
         
-        # Validate QC results
-        if len(samples_qc) < 2:
-            raise ValueError(f"Not enough samples for PCA after QC. Only {len(samples_qc)} samples remaining (minimum 2 required).")
-        if gn_imputed_T.shape[1] < 1:
-            raise ValueError(f"No SNPs remaining after QC. Try adjusting QC thresholds.")
+        if len(samples_qc) < 2: 
+            raise ValueError(f"Jumlah sampel tidak cukup untuk PCA setelah QC. Hanya {len(samples_qc)} sampel tersisa (minimal 2 dibutuhkan).")
+        if gn_imputed_T.shape[1] < 1: 
+            raise ValueError(f"Tidak ada SNP tersisa setelah QC. Coba sesuaikan ambang batas QC.")
         
-        # 3. Jalankan PCA
-        # Pastikan n_pca_components tidak melebihi dimensi data
-        max_components = min(len(samples_qc) - 1, gn_imputed_T.shape[1])
-        actual_n_components = min(n_pca_components, max_components)
+        max_possible_components = min(len(samples_qc) - 1, gn_imputed_T.shape[1])
+        
+        actual_n_components = min(n_pca_components, max_possible_components)
+        
         if actual_n_components < 1:
-            actual_n_components = 1
-        
+            if max_possible_components >=1:
+                actual_n_components = 1
+            else: 
+                 raise ValueError(f"Data tidak cukup untuk menghitung komponen PCA (sampel setelah QC={len(samples_qc)}, fitur setelah QC={gn_imputed_T.shape[1]}). Perlu minimal 2 sampel dan 1 fitur.")
+
         try:
             pcs, var_ratio = run_pca_analysis(gn_imputed_T, n_components=actual_n_components)
         except Exception as e:
-            raise RuntimeError(f"Error during PCA analysis: {str(e)}")
+            raise RuntimeError(f"Kesalahan selama analisis PCA: {str(e)}")
         
-        # 4. Siapkan hasil PCA untuk plot
-        num_pcs_to_df = min(pcs.shape[1], n_pca_components)
-        pca_columns = [f'PC{i+1}' for i in range(num_pcs_to_df)]
-        df_pca_coords = pd.DataFrame(data=pcs[:, :num_pcs_to_df], columns=pca_columns)
+        num_pcs_generated = pcs.shape[1] 
+        pca_columns = [f'PC{i+1}' for i in range(num_pcs_generated)]
+        df_pca_coords = pd.DataFrame(data=pcs[:, :num_pcs_generated], columns=pca_columns)
         df_pca_coords['Sample'] = samples_qc[:len(df_pca_coords)]
-
-        # 5. Hasilkan insight
-        insights = generate_summary_insights(var_ratio, samples_orig, len(samples_qc), snps_orig, snps_qc)
         
         analysis_summary = {
             'samples_original': samples_orig,
@@ -162,16 +145,14 @@ def trigger_analysis_pipeline(vcf_contents_base64, filename,
         return {
             'pca_coords_df_json': df_pca_coords.to_json(orient='split'),
             'variance_explained': var_ratio.tolist(),
-            'insights_text': insights,
             'analysis_summary': analysis_summary
         }
 
     except Exception as e:
-        # Re-raise with more context
         if isinstance(e, (ValueError, RuntimeError)):
             raise e
         else:
-            raise RuntimeError(f"Unexpected error in analysis pipeline: {str(e)}")
+            raise RuntimeError(f"Kesalahan tak terduga dalam pipeline analisis: {str(e)}")
     finally:
         if temp_vcf_path and os.path.exists(temp_vcf_path):
             try:
@@ -181,28 +162,26 @@ def trigger_analysis_pipeline(vcf_contents_base64, filename,
 
 
 def parse_dataframe_to_json(contents, filename, file_type="CSV/TSV"):
-    """Parse various file formats to JSON for Dash storage."""
     if contents is None:
-        return None, f"No {file_type} file uploaded."
+        return None, f"Tidak ada berkas {file_type} yang diunggah."
     
     try:
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
     except Exception as e:
-        return None, f"Error decoding file: {str(e)}"
+        return None, f"Kesalahan saat mendekode berkas: {str(e)}"
     
     try:
         if filename.lower().endswith('.q'):
             df = pd.read_csv(io.StringIO(decoded.decode('utf-8')), sep=r'\s+', header=None, engine='python')
         elif filename.lower().endswith(('.evec', '.eigen', '.pca')):
             df = pd.read_csv(io.StringIO(decoded.decode('utf-8')), sep=r'\s+', header=None, engine='python')
-            # Coba deteksi header atau kolom sampel
             try:
                 pd.to_numeric(df.iloc[:, 0])
             except ValueError:
                 df.index = df.iloc[:, 0]
                 df = df.iloc[:, 1:]
-        else:  # CSV atau TSV
+        else:
             try:
                 df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
             except:
@@ -212,33 +191,29 @@ def parse_dataframe_to_json(contents, filename, file_type="CSV/TSV"):
                     df = pd.read_csv(io.StringIO(decoded.decode('utf-8')), sep=r'\s+', engine='python')
 
         if df.empty:
-            return None, f"{file_type} file '{filename}' is empty."
+            return None, f"Berkas {file_type} '{filename}' kosong."
 
-        # Validasi spesifik untuk PCA
         if file_type == "PCA":
             if df.shape[1] < 2:
-                return None, f"PCA file should have at least 2 columns for PCs. Found {df.shape[1]} columns."
-            numeric_cols = df.select_dtypes(include=[np.number]).columns
-            if len(numeric_cols) < 2:
-                if df.iloc[:, 0].dtype == 'object' and df.iloc[:, 1:].select_dtypes(include=[np.number]).shape[1] >= 2:
-                    pass
-                else:
-                    return None, f"PCA file should contain primarily numeric data for principal components."
+                return None, f"Berkas PCA harus memiliki setidaknya 2 kolom (Sampel, PC1). Ditemukan {df.shape[1]} kolom."
+            numeric_cols = df.iloc[:,1:].select_dtypes(include=[np.number]).columns
+            if len(numeric_cols) < 1: 
+                 return None, f"Berkas PCA harus berisi data numerik untuk komponen utama."
                 
         elif file_type == "ADMIXTURE":
             if df.select_dtypes(include=[np.number]).shape[1] > 0:
                 numeric_data = df.select_dtypes(include=[np.number])
                 if not ((numeric_data >= 0) & (numeric_data <= 1)).all().all():
-                    return None, f"ADMIXTURE file should contain proportions between 0 and 1."
+                    return None, f"Berkas ADMIXTURE harus berisi proporsi antara 0 dan 1."
                 row_sums = numeric_data.sum(axis=1)
-                if not np.allclose(row_sums, 1.0, atol=0.01):
-                    return None, f"ADMIXTURE proportions should sum to 1 for each sample."
+                if not np.allclose(row_sums, 1.0, atol=0.01): 
+                    return None, f"Proporsi ADMIXTURE harus berjumlah mendekati 1 untuk setiap sampel."
         
-        return df.to_json(date_format='iso', orient='split'), f"{file_type} file '{filename}' loaded successfully. Shape: {df.shape}."
+        return df.to_json(date_format='iso', orient='split'), f"Berkas {file_type} '{filename}' berhasil dimuat. Bentuk: {df.shape}."
     
     except Exception as e:
-        print(f"{file_type} Parsing Error for {filename}: {e}")
-        return None, f"Error parsing {file_type} file '{filename}': {str(e)}"
+        print(f"Kesalahan parsing {file_type} untuk {filename}: {e}")
+        return None, f"Kesalahan saat memparsing berkas {file_type} '{filename}': {str(e)}"
 
 
 def parse_pca_to_json(contents, filename):
