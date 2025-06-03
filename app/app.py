@@ -5,8 +5,8 @@ import io
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-# import plotly.figure_factory as ff
 import numpy as np
+import traceback
 
 from app.data_processing import *
 
@@ -181,7 +181,7 @@ app.layout = html.Div(
                     html.Div([
                         html.H4("Pengaturan Analisis FST", style={'marginTop': '20px', 'marginBottom': '15px', 'fontSize': '18px', 'color': '#34495e'}),
                         html.Div([
-                            html.Label("Minimum Depth per Pool (1-50):", style={'fontWeight': '500', 'fontSize': '14px', 'color': '#555'}),
+                            html.Label("Kedalaman Minimal Per Pool (1-50):", style={'fontWeight': '500', 'fontSize': '14px', 'color': '#555'}),
                             dcc.Input(id='min-depth-input', type='number', value=10, min=1, max=50, step=1, style={'width': '100%', 'padding': '8px', 'borderRadius': '4px', 'border': '1px solid #ccc', 'boxSizing': 'border-box', 'marginTop': '5px'}),
                         ], style={'marginBottom': '15px'}),
                     ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px', 'boxShadow': '0px 1px 3px rgba(0,0,0,0.05)', 'marginBottom': '20px'}),
@@ -437,11 +437,24 @@ def calculate_fst_callback(n_clicks, pooled_data, min_depth):
     if min_depth is None or not (1 <= min_depth <= 50):
         return None, "Minimum depth harus antara 1 dan 50."
     
+    print(f"DEBUG: calculate_fst_callback triggered. min_depth from input: {min_depth} (type: {type(min_depth)})")
     try:
         results = analyze_fst_from_pooled_data(pooled_data['pooled_df_json'], min_depth=int(min_depth))
+        print("DEBUG: calculate_fst_callback: analyze_fst_from_pooled_data successful.")
         return results, None
     except Exception as e:
-        return None, f"Kesalahan selama analisis FST: {str(e)}"
+        print("ERROR in calculate_fst_callback during FST analysis:")
+        print(f"Exception type: {type(e).__name__}")
+        print(f"Exception message: {str(e)}")
+        print("Full Traceback:")
+        traceback.print_exc()
+        
+        error_message = str(e)
+        if "Kesalahan selama analisis FST:" in error_message or "Kesalahan saat memparsing" in error_message :
+            user_facing_error = error_message
+        else:
+            user_facing_error = f"Kesalahan selama analisis FST: {error_message}"
+        return None, user_facing_error
 
 @app.callback(
     Output('analysis-results-container', 'children', allow_duplicate=True),
@@ -589,7 +602,6 @@ def display_fst_results(fst_results):
     try:
         fst_matrix_df = pd.read_json(io.StringIO(fst_results['fst_matrix']), orient='split')
         
-        # Create Heatmap
         heatmap_fig = go.Figure(data=go.Heatmap(
             z=fst_matrix_df.values,
             x=fst_matrix_df.columns,
@@ -632,7 +644,6 @@ def display_fst_results(fst_results):
         return html.Div([
             html.Hr(style={'borderColor': '#ecf0f1', 'margin': '30px 0'}),
             dcc.Graph(figure=heatmap_fig),
-            # Removed dendrogram component
             html.Div(download_link, style={'textAlign': 'center', 'marginTop': '20px'})
         ], style={'padding': '0 20px'})
         

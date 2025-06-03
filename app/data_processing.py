@@ -6,6 +6,7 @@ import tempfile
 import os
 import warnings
 from cyvcf2 import VCF
+import traceback
 
 try:
     from vcfFunctions import (
@@ -15,7 +16,6 @@ try:
     )
     from fst_calculations import (
         create_fst_matrix
-        # calculate_dendrogram_data 
     )
 except ImportError:
     from app.vcfFunctions import (
@@ -25,7 +25,6 @@ except ImportError:
     )
     from app.fst_calculations import (
         create_fst_matrix
-        # calculate_dendrogram_data
     )
 
 def parse_vcf_to_json_summary(contents, filename):
@@ -72,7 +71,6 @@ def parse_vcf_to_json_summary(contents, filename):
             return result_data, f"Sampel: {len(samples)}, Varian: {total_variants}."
         
     except Exception as e:
-        print(f"Kesalahan Parsing Ringkasan VCF untuk {filename}: {e}")
         error_msg = str(e)
         if "BGZF" in error_msg and not is_gzipped:
             return None, f"Kesalahan: Berkas VCF '{filename}' tampak terkompresi gzip tetapi tidak memiliki ekstensi .gz."
@@ -220,7 +218,6 @@ def parse_dataframe_to_json(contents, filename, file_type="CSV/TSV"):
         return df.to_json(date_format='iso', orient='split'), f"Berkas {file_type} '{filename}' berhasil dimuat. Bentuk: {df.shape}."
     
     except Exception as e:
-        print(f"Kesalahan parsing {file_type} untuk {filename}: {e}")
         return None, f"Kesalahan saat memparsing berkas {file_type} '{filename}': {str(e)}"
 
 
@@ -248,19 +245,53 @@ def parse_pooled_data(contents, filename):
     
     try:
         df = pd.read_csv(io.StringIO(decoded.decode('utf-8')), sep=r'\s+', engine='python')
-        
+
         if df.empty:
             return None, "Berkas pooled data kosong."
         
-        ref_cols = [col for col in df.columns if col.startswith('reference_count_')]
-        depth_cols = [col for col in df.columns if col.startswith('pool_depth_')]
+        all_cols = df.columns.tolist()
+        ref_cols = [col for col in all_cols if col.startswith('reference_count_')]
+        depth_cols = [col for col in all_cols if col.startswith('pool_depth_')]
         
         if not ref_cols or not depth_cols:
             return None, "Berkas tidak memiliki kolom reference_count_ atau pool_depth_ yang diperlukan."
-        
+
+        critical_cols = ref_cols + depth_cols
+        for col_name in critical_cols:
+            if col_name in df.columns:
+                original_dtype = df[col_name].dtype
+                df[col_name] = pd.to_numeric(df[col_name], errors='coerce')
+                if df[col_name].isnull().any():
+                    print(f"WARNING: parse_pooled_data - Column '{col_name}' (original dtype: {original_dtype}) contains NaNs after pd.to_numeric(errors='coerce'). Check input file for non-numeric values in this column.")
+            else:
+                return None, f"Kolom kritis '{col_name}' tidak ditemukan."
+
+        for col_name in critical_cols:
+            if not pd.api.types.is_numeric_dtype(df[col_name]):
+                 return None, f"Kolom kritis {col_name} gagal dikonversi ke tipe numerik."
+
+        for col_name in depth_cols:
+            if (df[col_name] < 0).any():
+                return None, f"Kolom kedalaman '{col_name}' berisi nilai negatif yang tidak valid."
+
+        pool_suffixes = set()
+        for c in ref_cols: pool_suffixes.add(c.replace('reference_count_',''))
+        for c in depth_cols: pool_suffixes.add(c.replace('pool_depth_',''))
+
+        for suffix in sorted(list(pool_suffixes)):
+            ref_col = f'reference_count_{suffix}'
+            depth_col = f'pool_depth_{suffix}'
+            if ref_col in df.columns and depth_col in df.columns:
+                invalid_rows_mask = (df[ref_col] > df[depth_col]) & df[depth_col].notna() & df[ref_col].notna()
+                if invalid_rows_mask.any():
+                    return None, f"Untuk pool {suffix}, ditemukan reference_count > pool_depth pada beberapa baris. Ini tidak valid."
+
         return df.to_json(orient='split'), f"Berkas pooled data '{filename}' berhasil dimuat. SNPs: {len(df)}, Pools: {len(ref_cols)}."
     
     except Exception as e:
+        print(f"ERROR: Unhandled exception in parse_pooled_data for {filename}: {type(e).__name__} - {str(e)}")
+        print("Full Traceback for parse_pooled_data:")
+        traceback.print_exc()
         return None, f"Kesalahan saat memparsing berkas pooled data: {str(e)}"
 
 
@@ -268,15 +299,17 @@ def analyze_fst_from_pooled_data(pooled_df_json, min_depth=10):
     try:
         df = pd.read_json(io.StringIO(pooled_df_json), orient='split')
         
-        fst_matrix = create_fst_matrix(df, min_depth=min_depth)
+        fst_matrix = create_fst_matrix(df, min_depth=int(min_depth))
         
-        # linkage_matrix, pool_labels = calculate_dendrogram_data(fst_matrix) # Removed this line
-        
+        if fst_matrix is None:
+             raise RuntimeError("create_fst_matrix returned None, which is unexpected.")
+
         return {
             'fst_matrix': fst_matrix.to_json(orient='split')
-            # 'linkage_matrix': linkage_matrix.tolist(), # Removed this line
-            # 'pool_labels': pool_labels # Removed this line
         }
     
     except Exception as e:
-        raise RuntimeError(f"Kesalahan selama analisis FST: {str(e)}")
+        print(f"ERROR: Exception in analyze_fst_from_pooled_data: {type(e).__name__} - {str(e)}")
+        print("Full Traceback for analyze_fst_from_pooled_data:")
+        traceback.print_exc()
+        raise
