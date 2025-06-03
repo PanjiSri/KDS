@@ -7,6 +7,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 import traceback
+import urllib.parse
 
 from app.data_processing import *
 
@@ -470,6 +471,7 @@ def display_analysis_results(pca_results_json):
     analysis_summary = pca_results_json.get('analysis_summary')
 
     pca_plot_div = html.Div("Gagal memuat plot PCA.")
+    pca_df = None
     fig = None 
 
     if pca_coords_df_json and variance_explained:
@@ -543,6 +545,38 @@ def display_analysis_results(pca_results_json):
 
         except Exception as e:
             pca_plot_div = html.Div(f"Kesalahan saat membuat plot PCA: {str(e)}")
+            pca_df = None 
+
+    download_pca_link_div = html.Div() 
+    if pca_df is not None and not pca_df.empty:
+        try:
+            pc_cols = [col for col in pca_df.columns if col.startswith('PC')]
+            if 'Sample' in pca_df.columns and pc_cols:
+                df_for_pca_file = pca_df[['Sample'] + pc_cols]
+                pca_data_string = df_for_pca_file.to_csv(sep=' ', index=False, header=True)
+                
+                download_pca_link_div = html.Div(
+                    html.A(
+                        'Download Hasil PCA (.pca)',
+                        id='download-pca-link',
+                        download="pca_results.pca",
+                        href=f"data:text/plain;charset=utf-8,{urllib.parse.quote(pca_data_string)}",
+                        target="_blank",
+                        style={
+                            'display': 'inline-block',
+                            'padding': '10px 20px',
+                            'backgroundColor': '#3498db',
+                            'color': 'white',
+                            'textDecoration': 'none',
+                            'borderRadius': '5px',
+                            'fontSize': '14px',
+                            'fontWeight': '500'
+                        }
+                    ), style={'textAlign': 'center', 'marginTop': '20px'}
+                )
+        except Exception as e:
+            download_pca_link_div = html.Div(f"Gagal membuat link download PCA: {str(e)}")
+
 
     variance_table_div = html.Div("Gagal memuat tabel varians.")
     if variance_explained:
@@ -584,6 +618,7 @@ def display_analysis_results(pca_results_json):
     return html.Div([
         html.Hr(style={'borderColor': '#ecf0f1', 'margin': '30px 0'}),
         pca_plot_div,
+        download_pca_link_div,
         html.Div([
             variance_table_div,
             summary_stats_div
@@ -626,7 +661,7 @@ def display_fst_results(fst_results):
             'Download Matrix FST (CSV)',
             id='download-fst-csv',
             download="fst_matrix.csv",
-            href="data:text/csv;charset=utf-8," + fst_matrix_df.to_csv(),
+            href="data:text/csv;charset=utf-8," + urllib.parse.quote(fst_matrix_df.to_csv()), # Menggunakan urllib.parse.quote untuk FST juga
             target="_blank",
             style={
                 'display': 'inline-block',
@@ -690,6 +725,7 @@ def display_fst_results(fst_results):
         
     except Exception as e:
         print(f"Error displaying FST results: {e}")
+        traceback.print_exc() 
         return html.Div(f"Kesalahan saat menampilkan hasil FST: {str(e)}", 
                        style={'color': 'red', 'textAlign': 'center', 'marginTop': '20px'})
 
