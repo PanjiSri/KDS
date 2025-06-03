@@ -185,42 +185,42 @@ def generate_summary_insights(variance_explained, samples_original_count, sample
         samples_retention_pct = (samples_after_qc_count / samples_original_count) * 100
         snps_retention_pct = (snps_after_qc_count / snps_original_count) * 100
         
-        insight_text = f"### Quality Control Summary\n\n"
-        insight_text += f"**Samples**: {samples_after_qc_count} dari {samples_original_count} "
-        insight_text += f"({samples_retention_pct:.1f}% retained, {samples_removed} removed)\n\n"
-        insight_text += f"**SNPs**: {snps_after_qc_count:,} dari {snps_original_count:,} "
-        insight_text += f"({snps_retention_pct:.1f}% retained, {snps_removed:,} removed)\n\n"
+        insight_text = f"### Ringkasan Kontrol Kualitas\n\n"
+        insight_text += f"**Sampel**: {samples_after_qc_count} dari {samples_original_count} "
+        insight_text += f"({samples_retention_pct:.1f}% dipertahankan, {samples_removed} dihapus)\n\n"
+        insight_text += f"**SNP**: {snps_after_qc_count:,} dari {snps_original_count:,} "
+        insight_text += f"({snps_retention_pct:.1f}% dipertahankan, {snps_removed:,} dihapus)\n\n"
         
-        insight_text += f"### PCA Results\n\n"
+        insight_text += f"### Hasil PCA\n\n"
         
         if len(variance_explained) > 0:
             var_pc1 = variance_explained[0] * 100
-            insight_text += f"- **PC1** explains **{var_pc1:.2f}%** of genetic variation\n"
+            insight_text += f"- **PC1** menjelaskan **{var_pc1:.2f}%** dari variasi genetik\n"
         
         if len(variance_explained) > 1:
             var_pc2 = variance_explained[1] * 100
-            insight_text += f"- **PC2** explains **{var_pc2:.2f}%** of genetic variation\n"
+            insight_text += f"- **PC2** menjelaskan **{var_pc2:.2f}%** dari variasi genetik\n"
             cumulative_var = (variance_explained[0] + variance_explained[1]) * 100
-            insight_text += f"- **PC1 & PC2** together explain **{cumulative_var:.2f}%** of total variation\n"
+            insight_text += f"- **PC1 & PC2** secara bersama-sama menjelaskan **{cumulative_var:.2f}%** dari total variasi\n"
         
         if len(variance_explained) > 2:
             var_pc3 = variance_explained[2] * 100
-            insight_text += f"- **PC3** explains **{var_pc3:.2f}%** of genetic variation\n"
+            insight_text += f"- **PC3** menjelaskan **{var_pc3:.2f}%** dari variasi genetik\n"
             cumulative_var_3 = sum(variance_explained[:3]) * 100
-            insight_text += f"- **First 3 PCs** explain **{cumulative_var_3:.2f}%** of total variation\n"
+            insight_text += f"- **3 PC pertama** menjelaskan **{cumulative_var_3:.2f}%** dari total variasi\n"
         
         # Add interpretation
-        insight_text += f"\n### Interpretation\n\n"
+        insight_text += f"\n### Interpretasi\n\n"
         
         if len(variance_explained) > 0:
             if variance_explained[0] > 0.1:  # If PC1 explains >10%
-                insight_text += "The first principal component captures a substantial portion of genetic variation, "
-                insight_text += "suggesting strong population structure or differentiation in your dataset.\n"
+                insight_text += "Komponen utama pertama menangkap sebagian besar variasi genetik, "
+                insight_text += "menunjukkan adanya struktur populasi yang kuat atau diferensiasi dalam dataset Anda.\n"
             else:
-                insight_text += "The genetic variation is distributed across multiple components, "
-                insight_text += "suggesting subtle population structure or high genetic diversity.\n"
+                insight_text += "Variasi genetik tersebar di beberapa komponen, "
+                insight_text += "menunjukkan adanya struktur populasi yang halus atau keragaman genetik yang tinggi.\n"
         
         return insight_text
         
     except Exception as e:
-        return f"Error generating insights: {str(e)}"
+        return f"Error dalam membuat penjelasan: {str(e)}"
