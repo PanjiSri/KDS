@@ -237,9 +237,9 @@ def display_analysis_results(pca_results_json):
                 pc1_var = variance_explained[0]*100 if len(variance_explained) > 0 else 0
                 pc2_var = variance_explained[1]*100 if len(variance_explained) > 1 else 0
                 
-                fig = px.scatter(pca_df, x='PC1', y='PC2', text='Sample', hover_name='Sample',
-                                 labels={'PC1': f'PC1 ({pc1_var:.2f}%)',
-                                         'PC2': f'PC2 ({pc2_var:.2f}%)'})
+                fig = px.scatter(pca_df, x='PC1', y='PC2', hover_name='Sample',
+                                                labels={'PC1': f'PC1 ({pc1_var:.2f}%)',
+                                                        'PC2': f'PC2 ({pc2_var:.2f}%)'})
                 fig.update_layout(
                     title_text="<b>Plot Analisis Komponen Utama (PCA)</b>", 
                     title_x=0.5,
