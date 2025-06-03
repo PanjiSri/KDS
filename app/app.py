@@ -7,6 +7,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 import traceback
+import urllib.parse
 
 from app.data_processing import *
 
@@ -470,11 +471,12 @@ def display_analysis_results(pca_results_json):
     analysis_summary = pca_results_json.get('analysis_summary')
 
     pca_plot_div = html.Div("Gagal memuat plot PCA.")
+    pca_df = None 
     fig = None 
 
     if pca_coords_df_json and variance_explained:
         try:
-            pca_df = pd.read_json(io.StringIO(pca_coords_df_json), orient='split')
+            pca_df = pd.read_json(io.StringIO(pca_coords_df_json), orient='split') 
             
             has_pc1 = 'PC1' in pca_df.columns and len(variance_explained) >= 1
             has_pc2 = 'PC2' in pca_df.columns and len(variance_explained) >= 2
@@ -543,6 +545,38 @@ def display_analysis_results(pca_results_json):
 
         except Exception as e:
             pca_plot_div = html.Div(f"Kesalahan saat membuat plot PCA: {str(e)}")
+            pca_df = None 
+
+    download_pca_link_div = html.Div() 
+    if pca_df is not None and not pca_df.empty:
+        try:
+            pc_cols = [col for col in pca_df.columns if col.startswith('PC')]
+            if 'Sample' in pca_df.columns and pc_cols:
+                df_for_pca_file = pca_df[['Sample'] + pc_cols]
+                pca_data_string = df_for_pca_file.to_csv(sep=' ', index=False, header=True)
+                
+                download_pca_link_div = html.Div(
+                    html.A(
+                        'Download Hasil PCA (.pca)',
+                        id='download-pca-link',
+                        download="pca_results.pca",
+                        href=f"data:text/plain;charset=utf-8,{urllib.parse.quote(pca_data_string)}",
+                        target="_blank",
+                        style={
+                            'display': 'inline-block',
+                            'padding': '10px 20px',
+                            'backgroundColor': '#3498db', 
+                            'color': 'white',
+                            'textDecoration': 'none',
+                            'borderRadius': '5px',
+                            'fontSize': '14px',
+                            'fontWeight': '500'
+                        }
+                    ), style={'textAlign': 'center', 'marginTop': '30px', 'marginBottom': '20px'}
+                )
+        except Exception as e:
+            download_pca_link_div = html.Div(f"Gagal membuat link download PCA: {str(e)}")
+
 
     variance_table_div = html.Div("Gagal memuat tabel varians.")
     if variance_explained:
@@ -587,7 +621,8 @@ def display_analysis_results(pca_results_json):
         html.Div([
             variance_table_div,
             summary_stats_div
-        ], style={'display': 'grid', 'gridTemplateColumns': 'minmax(250px, auto) 1fr', 'gap': '30px', 'alignItems': 'start', 'marginTop': '20px'})
+        ], style={'display': 'grid', 'gridTemplateColumns': 'minmax(250px, auto) 1fr', 'gap': '30px', 'alignItems': 'start', 'marginTop': '20px'}),
+        download_pca_link_div
     ], style={'padding': '0 20px'})
 
 @app.callback(
@@ -626,7 +661,7 @@ def display_fst_results(fst_results):
             'Download Matrix FST (CSV)',
             id='download-fst-csv',
             download="fst_matrix.csv",
-            href="data:text/csv;charset=utf-8," + fst_matrix_df.to_csv(),
+            href="data:text/csv;charset=utf-8," + urllib.parse.quote(fst_matrix_df.to_csv()), # Menggunakan urllib.parse.quote untuk FST juga
             target="_blank",
             style={
                 'display': 'inline-block',
@@ -635,20 +670,62 @@ def display_fst_results(fst_results):
                 'color': 'white',
                 'textDecoration': 'none',
                 'borderRadius': '5px',
-                'marginTop': '20px',
                 'fontSize': '14px',
                 'fontWeight': '500'
             }
         )
+
+        fst_summary_data = fst_results.get('fst_summary_stats')
+        fst_value_distribution_data = fst_results.get('fst_value_distribution_table_data')
+
+        summary_div = html.Div("Gagal memuat ringkasan analisis FST.")
+        if fst_summary_data:
+            try:
+                summary_div = html.Div([
+                    html.H4("Ringkasan Analisis FST", style={'textAlign': 'left', 'marginTop': '25px', 'marginBottom': '10px', 'fontSize': '18px', 'color': '#34495e'}),
+                    html.P(f"Jumlah pool dianalisis: {fst_summary_data.get('num_pools', 'N/A')}", style={'fontSize': '14px', 'marginBottom':'5px'}),
+                    html.P(f"Jumlah SNP dalam data input: {fst_summary_data.get('num_snps_input', 'N/A')}", style={'fontSize': '14px', 'marginBottom':'5px'}),
+                    html.P(f"Ambang batas kedalaman minimal per pool: {fst_summary_data.get('min_depth_filter', 'N/A')}", style={'fontSize': '14px', 'marginBottom':'15px'}),
+                ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px', 'boxShadow': '0px 1px 3px rgba(0,0,0,0.05)'})
+            except Exception as e:
+                summary_div = html.Div(f"Kesalahan saat menampilkan ringkasan FST: {str(e)}")
+
+        distribution_table_div = html.Div("Gagal memuat tabel distribusi nilai FST.")
+        if fst_value_distribution_data:
+            try:
+                rows = []
+                for item in fst_value_distribution_data:
+                    rows.append(html.Tr([
+                        html.Td(item['Statistic'], style={'padding': '8px', 'border': '1px solid #ddd'}),
+                        html.Td(str(item['Value']), style={'padding': '8px', 'border': '1px solid #ddd', 'textAlign': 'right'})
+                    ]))
+                
+                distribution_table_div = html.Div([
+                    html.H4("Distribusi Nilai FST Pairwise", style={'textAlign': 'left', 'marginTop': '25px', 'marginBottom': '10px', 'fontSize': '18px', 'color': '#34495e'}),
+                    html.Table([
+                        html.Thead(html.Tr([
+                            html.Th("Statistik", style={'padding': '10px', 'border': '1px solid #ddd', 'backgroundColor': '#ecf0f1', 'textAlign': 'left'}),
+                            html.Th("Nilai", style={'padding': '10px', 'border': '1px solid #ddd', 'backgroundColor': '#ecf0f1', 'textAlign': 'right'})
+                        ])),
+                        html.Tbody(rows)
+                    ], style={'margin': '0', 'borderCollapse': 'collapse', 'width': 'auto', 'fontSize': '14px', 'boxShadow': '0px 1px 3px rgba(0,0,0,0.05)'}),
+                ])
+            except Exception as e:
+                distribution_table_div = html.Div(f"Kesalahan saat membuat tabel distribusi FST: {str(e)}")
         
         return html.Div([
             html.Hr(style={'borderColor': '#ecf0f1', 'margin': '30px 0'}),
             dcc.Graph(figure=heatmap_fig),
-            html.Div(download_link, style={'textAlign': 'center', 'marginTop': '20px'})
+            html.Div([ 
+                distribution_table_div,
+                summary_div
+            ], style={'display': 'grid', 'gridTemplateColumns': 'minmax(300px, auto) 1fr', 'gap': '30px', 'alignItems': 'start', 'marginTop': '20px'}),
+            html.Div(download_link, style={'textAlign': 'center', 'marginTop': '30px', 'marginBottom': '20px'})
         ], style={'padding': '0 20px'})
         
     except Exception as e:
         print(f"Error displaying FST results: {e}")
+        traceback.print_exc() 
         return html.Div(f"Kesalahan saat menampilkan hasil FST: {str(e)}", 
                        style={'color': 'red', 'textAlign': 'center', 'marginTop': '20px'})
 

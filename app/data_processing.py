@@ -298,14 +298,45 @@ def parse_pooled_data(contents, filename):
 def analyze_fst_from_pooled_data(pooled_df_json, min_depth=10):
     try:
         df = pd.read_json(io.StringIO(pooled_df_json), orient='split')
+        num_snps_input = len(df)
         
-        fst_matrix = create_fst_matrix(df, min_depth=int(min_depth))
+        fst_matrix_df = create_fst_matrix(df, min_depth=int(min_depth))
         
-        if fst_matrix is None:
+        if fst_matrix_df is None:
              raise RuntimeError("create_fst_matrix returned None, which is unexpected.")
 
+        num_pools = len(fst_matrix_df.columns)
+
+        fst_values = fst_matrix_df.values[np.triu_indices_from(fst_matrix_df.values, k=1)]
+        fst_values_clean = fst_values[~np.isnan(fst_values)]
+
+        mean_fst = np.mean(fst_values_clean) if len(fst_values_clean) > 0 else np.nan
+        min_fst = np.min(fst_values_clean) if len(fst_values_clean) > 0 else np.nan
+        max_fst = np.max(fst_values_clean) if len(fst_values_clean) > 0 else np.nan
+
+        fst_summary_stats = {
+            'num_pools': num_pools,
+            'num_snps_input': num_snps_input,
+            'min_depth_filter': int(min_depth)
+        }
+
+        if num_pools < 2:
+            fst_value_distribution_table_data = [
+                {'Statistic': 'Mean Pairwise FST', 'Value': "N/A (membutuhkan >1 pool)"},
+                {'Statistic': 'Min Pairwise FST', 'Value': "N/A (membutuhkan >1 pool)"},
+                {'Statistic': 'Max Pairwise FST', 'Value': "N/A (membutuhkan >1 pool)"},
+            ]
+        else:
+            fst_value_distribution_table_data = [
+                {'Statistic': 'Mean Pairwise FST', 'Value': f"{mean_fst:.4f}" if not np.isnan(mean_fst) else "N/A"},
+                {'Statistic': 'Min Pairwise FST', 'Value': f"{min_fst:.4f}" if not np.isnan(min_fst) else "N/A"},
+                {'Statistic': 'Max Pairwise FST', 'Value': f"{max_fst:.4f}" if not np.isnan(max_fst) else "N/A"},
+            ]
+
         return {
-            'fst_matrix': fst_matrix.to_json(orient='split')
+            'fst_matrix': fst_matrix_df.to_json(orient='split'),
+            'fst_summary_stats': fst_summary_stats,
+            'fst_value_distribution_table_data': fst_value_distribution_table_data
         }
     
     except Exception as e:
