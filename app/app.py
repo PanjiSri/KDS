@@ -471,12 +471,12 @@ def display_analysis_results(pca_results_json):
     analysis_summary = pca_results_json.get('analysis_summary')
 
     pca_plot_div = html.Div("Gagal memuat plot PCA.")
-    pca_df = None
+    pca_df = None 
     fig = None 
 
     if pca_coords_df_json and variance_explained:
         try:
-            pca_df = pd.read_json(io.StringIO(pca_coords_df_json), orient='split')
+            pca_df = pd.read_json(io.StringIO(pca_coords_df_json), orient='split') 
             
             has_pc1 = 'PC1' in pca_df.columns and len(variance_explained) >= 1
             has_pc2 = 'PC2' in pca_df.columns and len(variance_explained) >= 2
@@ -565,14 +565,14 @@ def display_analysis_results(pca_results_json):
                         style={
                             'display': 'inline-block',
                             'padding': '10px 20px',
-                            'backgroundColor': '#3498db',
+                            'backgroundColor': '#3498db', 
                             'color': 'white',
                             'textDecoration': 'none',
                             'borderRadius': '5px',
                             'fontSize': '14px',
                             'fontWeight': '500'
                         }
-                    ), style={'textAlign': 'center', 'marginTop': '20px'}
+                    ), style={'textAlign': 'center', 'marginTop': '30px', 'marginBottom': '20px'}
                 )
         except Exception as e:
             download_pca_link_div = html.Div(f"Gagal membuat link download PCA: {str(e)}")
@@ -618,11 +618,11 @@ def display_analysis_results(pca_results_json):
     return html.Div([
         html.Hr(style={'borderColor': '#ecf0f1', 'margin': '30px 0'}),
         pca_plot_div,
-        download_pca_link_div,
         html.Div([
             variance_table_div,
             summary_stats_div
-        ], style={'display': 'grid', 'gridTemplateColumns': 'minmax(250px, auto) 1fr', 'gap': '30px', 'alignItems': 'start', 'marginTop': '20px'})
+        ], style={'display': 'grid', 'gridTemplateColumns': 'minmax(250px, auto) 1fr', 'gap': '30px', 'alignItems': 'start', 'marginTop': '20px'}),
+        download_pca_link_div
     ], style={'padding': '0 20px'})
 
 @app.callback(
