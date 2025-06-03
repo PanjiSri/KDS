@@ -635,16 +635,57 @@ def display_fst_results(fst_results):
                 'color': 'white',
                 'textDecoration': 'none',
                 'borderRadius': '5px',
-                'marginTop': '20px',
                 'fontSize': '14px',
                 'fontWeight': '500'
             }
         )
+
+        fst_summary_data = fst_results.get('fst_summary_stats')
+        fst_value_distribution_data = fst_results.get('fst_value_distribution_table_data')
+
+        summary_div = html.Div("Gagal memuat ringkasan analisis FST.")
+        if fst_summary_data:
+            try:
+                summary_div = html.Div([
+                    html.H4("Ringkasan Analisis FST", style={'textAlign': 'left', 'marginTop': '25px', 'marginBottom': '10px', 'fontSize': '18px', 'color': '#34495e'}),
+                    html.P(f"Jumlah pool dianalisis: {fst_summary_data.get('num_pools', 'N/A')}", style={'fontSize': '14px', 'marginBottom':'5px'}),
+                    html.P(f"Jumlah SNP dalam data input: {fst_summary_data.get('num_snps_input', 'N/A')}", style={'fontSize': '14px', 'marginBottom':'5px'}),
+                    html.P(f"Ambang batas kedalaman minimal per pool: {fst_summary_data.get('min_depth_filter', 'N/A')}", style={'fontSize': '14px', 'marginBottom':'15px'}),
+                ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px', 'boxShadow': '0px 1px 3px rgba(0,0,0,0.05)'})
+            except Exception as e:
+                summary_div = html.Div(f"Kesalahan saat menampilkan ringkasan FST: {str(e)}")
+
+        distribution_table_div = html.Div("Gagal memuat tabel distribusi nilai FST.")
+        if fst_value_distribution_data:
+            try:
+                rows = []
+                for item in fst_value_distribution_data:
+                    rows.append(html.Tr([
+                        html.Td(item['Statistic'], style={'padding': '8px', 'border': '1px solid #ddd'}),
+                        html.Td(str(item['Value']), style={'padding': '8px', 'border': '1px solid #ddd', 'textAlign': 'right'})
+                    ]))
+                
+                distribution_table_div = html.Div([
+                    html.H4("Distribusi Nilai FST Pairwise", style={'textAlign': 'left', 'marginTop': '25px', 'marginBottom': '10px', 'fontSize': '18px', 'color': '#34495e'}),
+                    html.Table([
+                        html.Thead(html.Tr([
+                            html.Th("Statistik", style={'padding': '10px', 'border': '1px solid #ddd', 'backgroundColor': '#ecf0f1', 'textAlign': 'left'}),
+                            html.Th("Nilai", style={'padding': '10px', 'border': '1px solid #ddd', 'backgroundColor': '#ecf0f1', 'textAlign': 'right'})
+                        ])),
+                        html.Tbody(rows)
+                    ], style={'margin': '0', 'borderCollapse': 'collapse', 'width': 'auto', 'fontSize': '14px', 'boxShadow': '0px 1px 3px rgba(0,0,0,0.05)'}),
+                ])
+            except Exception as e:
+                distribution_table_div = html.Div(f"Kesalahan saat membuat tabel distribusi FST: {str(e)}")
         
         return html.Div([
             html.Hr(style={'borderColor': '#ecf0f1', 'margin': '30px 0'}),
             dcc.Graph(figure=heatmap_fig),
-            html.Div(download_link, style={'textAlign': 'center', 'marginTop': '20px'})
+            html.Div([ 
+                distribution_table_div,
+                summary_div
+            ], style={'display': 'grid', 'gridTemplateColumns': 'minmax(300px, auto) 1fr', 'gap': '30px', 'alignItems': 'start', 'marginTop': '20px'}),
+            html.Div(download_link, style={'textAlign': 'center', 'marginTop': '30px', 'marginBottom': '20px'})
         ], style={'padding': '0 20px'})
         
     except Exception as e:
