@@ -13,11 +13,19 @@ try:
         apply_quality_control,
         run_pca_analysis
     )
+    from fst_calculations import (
+        create_fst_matrix
+        # calculate_dendrogram_data 
+    )
 except ImportError:
     from app.vcfFunctions import (
         read_vcf_for_analysis,
         apply_quality_control,
         run_pca_analysis
+    )
+    from app.fst_calculations import (
+        create_fst_matrix
+        # calculate_dendrogram_data
     )
 
 def parse_vcf_to_json_summary(contents, filename):
@@ -226,3 +234,49 @@ def parse_admixture_to_json(contents, filename):
 
 def parse_metadata_to_json(contents, filename):
     return parse_dataframe_to_json(contents, filename, file_type="Metadata")
+
+
+def parse_pooled_data(contents, filename):
+    if contents is None:
+        return None, "Tidak ada berkas pooled data yang diunggah."
+    
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+    except Exception as e:
+        return None, f"Kesalahan saat mendekode berkas: {str(e)}"
+    
+    try:
+        df = pd.read_csv(io.StringIO(decoded.decode('utf-8')), sep=r'\s+', engine='python')
+        
+        if df.empty:
+            return None, "Berkas pooled data kosong."
+        
+        ref_cols = [col for col in df.columns if col.startswith('reference_count_')]
+        depth_cols = [col for col in df.columns if col.startswith('pool_depth_')]
+        
+        if not ref_cols or not depth_cols:
+            return None, "Berkas tidak memiliki kolom reference_count_ atau pool_depth_ yang diperlukan."
+        
+        return df.to_json(orient='split'), f"Berkas pooled data '{filename}' berhasil dimuat. SNPs: {len(df)}, Pools: {len(ref_cols)}."
+    
+    except Exception as e:
+        return None, f"Kesalahan saat memparsing berkas pooled data: {str(e)}"
+
+
+def analyze_fst_from_pooled_data(pooled_df_json, min_depth=10):
+    try:
+        df = pd.read_json(io.StringIO(pooled_df_json), orient='split')
+        
+        fst_matrix = create_fst_matrix(df, min_depth=min_depth)
+        
+        # linkage_matrix, pool_labels = calculate_dendrogram_data(fst_matrix) # Removed this line
+        
+        return {
+            'fst_matrix': fst_matrix.to_json(orient='split')
+            # 'linkage_matrix': linkage_matrix.tolist(), # Removed this line
+            # 'pool_labels': pool_labels # Removed this line
+        }
+    
+    except Exception as e:
+        raise RuntimeError(f"Kesalahan selama analisis FST: {str(e)}")

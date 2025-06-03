@@ -4,6 +4,8 @@ import base64
 import io
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+# import plotly.figure_factory as ff
 import numpy as np
 
 from app.data_processing import *
@@ -34,98 +36,187 @@ app.layout = html.Div(
             }
         ),
         
-        dcc.Store(id='store-vcf-raw-data', storage_type='memory'),
-        
-        dcc.Upload(
-            id='upload-vcf',
-            children=html.Div([
-                html.Div(
-                    '📁',
-                    style={'fontSize': '38px', 'marginBottom': '12px', 'color': '#3498db'}
-                ),
-                html.Div(
-                    'Unggah VCF',
-                    style={'fontSize': '15px', 'color': '#555', 'fontWeight': '500'}
-                ),
-                html.Div(
-                    '(.vcf atau .vcf.gz)',
-                    style={'fontSize': '12px', 'color': '#7f8c8d', 'marginTop': '5px'}
-                )
+        dcc.Tabs(id='analysis-tabs', value='pca-tab', children=[
+            dcc.Tab(label='Analisis PCA', value='pca-tab', children=[
+                html.Div([
+                    dcc.Store(id='store-vcf-raw-data', storage_type='memory'),
+                    
+                    dcc.Upload(
+                        id='upload-vcf',
+                        children=html.Div([
+                            html.Div(
+                                '📁',
+                                style={'fontSize': '38px', 'marginBottom': '12px', 'color': '#3498db'}
+                            ),
+                            html.Div(
+                                'Unggah VCF',
+                                style={'fontSize': '15px', 'color': '#555', 'fontWeight': '500'}
+                            ),
+                            html.Div(
+                                '(.vcf atau .vcf.gz)',
+                                style={'fontSize': '12px', 'color': '#7f8c8d', 'marginTop': '5px'}
+                            )
+                        ]),
+                        style={
+                            'width': '100%',
+                            'height': '150px',
+                            'borderWidth': '2px',
+                            'borderStyle': 'dashed',
+                            'borderRadius': '10px',
+                            'borderColor': '#bdc3c7',
+                            'backgroundColor': '#f8f9fa',
+                            'cursor': 'pointer',
+                            'display': 'flex',
+                            'flexDirection': 'column',
+                            'alignItems': 'center',
+                            'justifyContent': 'center',
+                            'transition': 'all 0.3s ease',
+                            'marginBottom': '20px',
+                            'marginTop': '20px'
+                        },
+                        multiple=False
+                    ),
+                    
+                    html.Div(id='output-vcf-upload-status', style={'textAlign': 'center', 'minHeight': '20px', 'marginBottom': '20px'}),
+
+                    html.Div([
+                        html.H4("Pengaturan Analisis", style={'marginTop': '20px', 'marginBottom': '15px', 'fontSize': '18px', 'color': '#34495e'}),
+                        html.Div([
+                            html.Label("Ambang Batas MAF (0.00 - 0.50):", style={'fontWeight': '500', 'fontSize': '14px', 'color': '#555'}),
+                            dcc.Input(id='maf-threshold-input', type='number', value=0.05, min=0.00, max=0.50, step=0.01, style={'width': '100%', 'padding': '8px', 'borderRadius': '4px', 'border': '1px solid #ccc', 'boxSizing': 'border-box', 'marginTop': '5px'}),
+                        ], style={'marginBottom': '15px'}),
+                        
+                        html.Div([
+                            html.Label("Ambang Batas Data Hilang per SNP (0.00 - 1.00):", style={'fontWeight': '500', 'fontSize': '14px', 'color': '#555'}),
+                            dcc.Input(id='snp-missing-threshold-input', type='number', value=0.2, min=0.00, max=1.00, step=0.05, style={'width': '100%', 'padding': '8px', 'borderRadius': '4px', 'border': '1px solid #ccc', 'boxSizing': 'border-box', 'marginTop': '5px'}),
+                        ], style={'marginBottom': '15px'}),
+
+                        html.Div([
+                            html.Label("Ambang Batas Data Hilang per Individu (0.00 - 1.00):", style={'fontWeight': '500', 'fontSize': '14px', 'color': '#555'}),
+                            dcc.Input(id='ind-missing-threshold-input', type='number', value=0.2, min=0.00, max=1.00, step=0.05, style={'width': '100%', 'padding': '8px', 'borderRadius': '4px', 'border': '1px solid #ccc', 'boxSizing': 'border-box', 'marginTop': '5px'}),
+                        ], style={'marginBottom': '15px'}),
+
+                        html.Div([
+                            html.Label("Jumlah Komponen PCA (1 - 10):", style={'fontWeight': '500', 'fontSize': '14px', 'color': '#555'}),
+                            dcc.Input(id='n-pca-components-input', type='number', value=3, min=1, max=10, step=1, style={'width': '100%', 'padding': '8px', 'borderRadius': '4px', 'border': '1px solid #ccc', 'boxSizing': 'border-box', 'marginTop': '5px'}),
+                        ], style={'marginBottom': '15px'}),
+                    ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px', 'boxShadow': '0px 1px 3px rgba(0,0,0,0.05)', 'marginBottom': '20px'}),
+
+                    html.Button(
+                        'Mulai Analisis',
+                        id='start-analysis-button',
+                        n_clicks=0,
+                        style={
+                            'width': '100%',
+                            'padding': '15px',
+                            'fontSize': '17px',
+                            'fontWeight': '600',
+                            'cursor': 'pointer',
+                            'backgroundColor': '#2c3e50',
+                            'color': 'white',
+                            'border': 'none',
+                            'borderRadius': '8px',
+                            'transition': 'all 0.2s ease',
+                            'boxShadow': '0px 2px 5px rgba(0,0,0,0.1)'
+                        }
+                    ),
+                    html.Div(id='analysis-error-output', style={'color': 'red', 'marginTop': '15px', 'textAlign': 'center', 'fontWeight': 'bold'}),
+                    
+                    dcc.Store(id='store-pca-results-json'),
+
+                    dcc.Loading(
+                        id="loading-analysis-output",
+                        type="circle",
+                        children=[
+                            html.Div(id='analysis-results-container', style={'marginTop': '30px'})
+                        ],
+                        overlay_style={'visibility':'hidden'}
+                    )
+                ])
             ]),
-            style={
-                'width': '100%',
-                'height': '150px',
-                'borderWidth': '2px',
-                'borderStyle': 'dashed',
-                'borderRadius': '10px',
-                'borderColor': '#bdc3c7',
-                'backgroundColor': '#f8f9fa',
-                'cursor': 'pointer',
-                'display': 'flex',
-                'flexDirection': 'column',
-                'alignItems': 'center',
-                'justifyContent': 'center',
-                'transition': 'all 0.3s ease',
-                'marginBottom': '20px'
-            },
-            multiple=False
-        ),
-        
-        html.Div(id='output-vcf-upload-status', style={'textAlign': 'center', 'minHeight': '20px', 'marginBottom': '20px'}),
-
-        html.Div([
-            html.H4("Pengaturan Analisis", style={'marginTop': '20px', 'marginBottom': '15px', 'fontSize': '18px', 'color': '#34495e'}),
-            html.Div([
-                html.Label("Ambang Batas MAF (0.00 - 0.50):", style={'fontWeight': '500', 'fontSize': '14px', 'color': '#555'}),
-                dcc.Input(id='maf-threshold-input', type='number', value=0.05, min=0.00, max=0.50, step=0.01, style={'width': '100%', 'padding': '8px', 'borderRadius': '4px', 'border': '1px solid #ccc', 'boxSizing': 'border-box', 'marginTop': '5px'}),
-            ], style={'marginBottom': '15px'}),
             
-            html.Div([
-                html.Label("Ambang Batas Data Hilang per SNP (0.00 - 1.00):", style={'fontWeight': '500', 'fontSize': '14px', 'color': '#555'}),
-                dcc.Input(id='snp-missing-threshold-input', type='number', value=0.2, min=0.00, max=1.00, step=0.05, style={'width': '100%', 'padding': '8px', 'borderRadius': '4px', 'border': '1px solid #ccc', 'boxSizing': 'border-box', 'marginTop': '5px'}),
-            ], style={'marginBottom': '15px'}),
-
-            html.Div([
-                html.Label("Ambang Batas Data Hilang per Individu (0.00 - 1.00):", style={'fontWeight': '500', 'fontSize': '14px', 'color': '#555'}),
-                dcc.Input(id='ind-missing-threshold-input', type='number', value=0.2, min=0.00, max=1.00, step=0.05, style={'width': '100%', 'padding': '8px', 'borderRadius': '4px', 'border': '1px solid #ccc', 'boxSizing': 'border-box', 'marginTop': '5px'}),
-            ], style={'marginBottom': '15px'}),
-
-            html.Div([
-                html.Label("Jumlah Komponen PCA (1 - 10):", style={'fontWeight': '500', 'fontSize': '14px', 'color': '#555'}),
-                dcc.Input(id='n-pca-components-input', type='number', value=3, min=1, max=10, step=1, style={'width': '100%', 'padding': '8px', 'borderRadius': '4px', 'border': '1px solid #ccc', 'boxSizing': 'border-box', 'marginTop': '5px'}),
-            ], style={'marginBottom': '15px'}),
-        ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px', 'boxShadow': '0px 1px 3px rgba(0,0,0,0.05)', 'marginBottom': '20px'}),
-
-        html.Button(
-            'Mulai Analisis',
-            id='start-analysis-button',
-            n_clicks=0,
-            style={
-                'width': '100%',
-                'padding': '15px',
-                'fontSize': '17px',
-                'fontWeight': '600',
-                'cursor': 'pointer',
-                'backgroundColor': '#2c3e50',
-                'color': 'white',
-                'border': 'none',
-                'borderRadius': '8px',
-                'transition': 'all 0.2s ease',
-                'boxShadow': '0px 2px 5px rgba(0,0,0,0.1)'
-            }
-        ),
-        html.Div(id='analysis-error-output', style={'color': 'red', 'marginTop': '15px', 'textAlign': 'center', 'fontWeight': 'bold'}),
-        
-        dcc.Store(id='store-pca-results-json'),
-
-        dcc.Loading(
-            id="loading-analysis-output",
-            type="circle",
-            children=[
-                html.Div(id='analysis-results-container', style={'marginTop': '30px'})
-            ],
-            overlay_style={'visibility':'hidden'}
-        )
+            dcc.Tab(label='Analisis FST', value='fst-tab', children=[
+                html.Div([
+                    dcc.Store(id='store-pooled-data', storage_type='memory'),
+                    dcc.Store(id='store-fst-results', storage_type='memory'),
+                    
+                    dcc.Upload(
+                        id='upload-pooled-data',
+                        children=html.Div([
+                            html.Div(
+                                '📊',
+                                style={'fontSize': '38px', 'marginBottom': '12px', 'color': '#e74c3c'}
+                            ),
+                            html.Div(
+                                'Unggah Data Pooled',
+                                style={'fontSize': '15px', 'color': '#555', 'fontWeight': '500'}
+                            ),
+                            html.Div(
+                                '(data.auto)',
+                                style={'fontSize': '12px', 'color': '#7f8c8d', 'marginTop': '5px'}
+                            )
+                        ]),
+                        style={
+                            'width': '100%',
+                            'height': '150px',
+                            'borderWidth': '2px',
+                            'borderStyle': 'dashed',
+                            'borderRadius': '10px',
+                            'borderColor': '#bdc3c7',
+                            'backgroundColor': '#f8f9fa',
+                            'cursor': 'pointer',
+                            'display': 'flex',
+                            'flexDirection': 'column',
+                            'alignItems': 'center',
+                            'justifyContent': 'center',
+                            'transition': 'all 0.3s ease',
+                            'marginBottom': '20px',
+                            'marginTop': '20px'
+                        },
+                        multiple=False
+                    ),
+                    
+                    html.Div(id='output-pooled-upload-status', style={'textAlign': 'center', 'minHeight': '20px', 'marginBottom': '20px'}),
+                    
+                    html.Div([
+                        html.H4("Pengaturan Analisis FST", style={'marginTop': '20px', 'marginBottom': '15px', 'fontSize': '18px', 'color': '#34495e'}),
+                        html.Div([
+                            html.Label("Minimum Depth per Pool (1-50):", style={'fontWeight': '500', 'fontSize': '14px', 'color': '#555'}),
+                            dcc.Input(id='min-depth-input', type='number', value=10, min=1, max=50, step=1, style={'width': '100%', 'padding': '8px', 'borderRadius': '4px', 'border': '1px solid #ccc', 'boxSizing': 'border-box', 'marginTop': '5px'}),
+                        ], style={'marginBottom': '15px'}),
+                    ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px', 'boxShadow': '0px 1px 3px rgba(0,0,0,0.05)', 'marginBottom': '20px'}),
+                    
+                    html.Button(
+                        'Hitung FST',
+                        id='calculate-fst-button',
+                        n_clicks=0,
+                        style={
+                            'width': '100%',
+                            'padding': '15px',
+                            'fontSize': '17px',
+                            'fontWeight': '600',
+                            'cursor': 'pointer',
+                            'backgroundColor': '#e74c3c',
+                            'color': 'white',
+                            'border': 'none',
+                            'borderRadius': '8px',
+                            'transition': 'all 0.2s ease',
+                            'boxShadow': '0px 2px 5px rgba(0,0,0,0.1)'
+                        }
+                    ),
+                    
+                    html.Div(id='fst-error-output', style={'color': 'red', 'marginTop': '15px', 'textAlign': 'center', 'fontWeight': 'bold'}),
+                    
+                    dcc.Loading(
+                        id="loading-fst-output",
+                        type="circle",
+                        children=[
+                            html.Div(id='fst-results-container', style={'marginTop': '30px'})
+                        ]
+                    )
+                ])
+            ])
+        ])
     ]
 )
 
@@ -154,6 +245,28 @@ app.clientside_callback(
 app.clientside_callback(
     """
     function(n) {
+        var upload = document.getElementById('upload-pooled-data');
+        if (upload) {
+            upload.onmouseover = function() {
+                this.style.borderColor = '#e74c3c';
+                this.style.backgroundColor = '#fbeaea';
+            };
+            upload.onmouseout = function() {
+                this.style.borderColor = '#bdc3c7';
+                this.style.backgroundColor = '#f8f9fa';
+            };
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output('upload-pooled-data', 'style', allow_duplicate=True),
+    Input('upload-pooled-data', 'id'),
+    prevent_initial_call=True
+)
+
+app.clientside_callback(
+    """
+    function(n) {
         var button = document.getElementById('start-analysis-button');
         if (button) {
             button.onmouseover = function() {
@@ -170,6 +283,28 @@ app.clientside_callback(
     """,
     Output('start-analysis-button', 'style', allow_duplicate=True),
     Input('start-analysis-button', 'id'),
+    prevent_initial_call=True
+)
+
+app.clientside_callback(
+    """
+    function(n) {
+        var button = document.getElementById('calculate-fst-button');
+        if (button) {
+            button.onmouseover = function() {
+                this.style.backgroundColor = '#c0392b'; 
+                this.style.transform = 'translateY(-1px)';
+            };
+            button.onmouseout = function() {
+                this.style.backgroundColor = '#e74c3c';
+                this.style.transform = 'translateY(0)';
+            };
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output('calculate-fst-button', 'style', allow_duplicate=True),
+    Input('calculate-fst-button', 'id'),
     prevent_initial_call=True
 )
 
@@ -207,6 +342,39 @@ def update_vcf_store_and_clear_results(contents, filename):
             )
     return dash.no_update, dash.no_update, None, None
 
+@app.callback(
+    [Output('store-pooled-data', 'data'),
+     Output('output-pooled-upload-status', 'children'),
+     Output('fst-results-container', 'children', allow_duplicate=True),
+     Output('fst-error-output', 'children', allow_duplicate=True)],
+    Input('upload-pooled-data', 'contents'),
+    State('upload-pooled-data', 'filename'),
+    prevent_initial_call=True
+)
+def update_pooled_store_and_clear_results(contents, filename):
+    if contents is not None:
+        pooled_data, message = parse_pooled_data(contents, filename)
+        if pooled_data:
+            return (
+                {'pooled_df_json': pooled_data},
+                html.Div(
+                    f"✓ {message}",
+                    style={'fontSize': '14px', 'color': '#27ae60'}
+                ),
+                None,
+                None
+            )
+        else:
+            return (
+                None,
+                html.Div(
+                    f"✗ Gagal memuat berkas '{filename}': {message}",
+                    style={'fontSize': '14px', 'color': '#c0392b'}
+                ),
+                None,
+                None
+            )
+    return dash.no_update, dash.no_update, None, None
 
 @app.callback(
     [Output('store-pca-results-json', 'data'),
@@ -254,6 +422,26 @@ def run_analysis_pipeline_callback(n_clicks, vcf_raw_data,
             error_message = str(e)
         return None, error_message
 
+@app.callback(
+    [Output('store-fst-results', 'data'),
+     Output('fst-error-output', 'children', allow_duplicate=True)],
+    Input('calculate-fst-button', 'n_clicks'),
+    [State('store-pooled-data', 'data'),
+     State('min-depth-input', 'value')],
+    prevent_initial_call=True
+)
+def calculate_fst_callback(n_clicks, pooled_data, min_depth):
+    if not pooled_data or 'pooled_df_json' not in pooled_data:
+        return None, "Silakan unggah berkas pooled data terlebih dahulu."
+    
+    if min_depth is None or not (1 <= min_depth <= 50):
+        return None, "Minimum depth harus antara 1 dan 50."
+    
+    try:
+        results = analyze_fst_from_pooled_data(pooled_data['pooled_df_json'], min_depth=int(min_depth))
+        return results, None
+    except Exception as e:
+        return None, f"Kesalahan selama analisis FST: {str(e)}"
 
 @app.callback(
     Output('analysis-results-container', 'children', allow_duplicate=True),
@@ -388,6 +576,70 @@ def display_analysis_results(pca_results_json):
             summary_stats_div
         ], style={'display': 'grid', 'gridTemplateColumns': 'minmax(250px, auto) 1fr', 'gap': '30px', 'alignItems': 'start', 'marginTop': '20px'})
     ], style={'padding': '0 20px'})
+
+@app.callback(
+    Output('fst-results-container', 'children'),
+    Input('store-fst-results', 'data'),
+    prevent_initial_call=True
+)
+def display_fst_results(fst_results):
+    if not fst_results:
+        return None
+    
+    try:
+        fst_matrix_df = pd.read_json(io.StringIO(fst_results['fst_matrix']), orient='split')
+        
+        # Create Heatmap
+        heatmap_fig = go.Figure(data=go.Heatmap(
+            z=fst_matrix_df.values,
+            x=fst_matrix_df.columns,
+            y=fst_matrix_df.index,
+            colorscale='RdBu_r',
+            colorbar=dict(title="FST"),
+            text=np.round(fst_matrix_df.values, 3),
+            texttemplate="%{text}",
+            textfont={"size": 10},
+            hovertemplate="Pool 1: %{y}<br>Pool 2: %{x}<br>FST: %{z:.4f}<extra></extra>"
+        ))
+        
+        heatmap_fig.update_layout(
+            title=dict(text="<b>Heatmap FST Antar Pool</b>", x=0.5, font=dict(size=20)),
+            xaxis=dict(tickangle=-45),
+            height=600,
+            margin=dict(l=100, r=100, t=100, b=100),
+            font=dict(family='-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif')
+        )
+        
+        download_link = html.A(
+            'Download Matrix FST (CSV)',
+            id='download-fst-csv',
+            download="fst_matrix.csv",
+            href="data:text/csv;charset=utf-8," + fst_matrix_df.to_csv(),
+            target="_blank",
+            style={
+                'display': 'inline-block',
+                'padding': '10px 20px',
+                'backgroundColor': '#3498db',
+                'color': 'white',
+                'textDecoration': 'none',
+                'borderRadius': '5px',
+                'marginTop': '20px',
+                'fontSize': '14px',
+                'fontWeight': '500'
+            }
+        )
+        
+        return html.Div([
+            html.Hr(style={'borderColor': '#ecf0f1', 'margin': '30px 0'}),
+            dcc.Graph(figure=heatmap_fig),
+            # Removed dendrogram component
+            html.Div(download_link, style={'textAlign': 'center', 'marginTop': '20px'})
+        ], style={'padding': '0 20px'})
+        
+    except Exception as e:
+        print(f"Error displaying FST results: {e}")
+        return html.Div(f"Kesalahan saat menampilkan hasil FST: {str(e)}", 
+                       style={'color': 'red', 'textAlign': 'center', 'marginTop': '20px'})
 
 
 if __name__ == '__main__':
